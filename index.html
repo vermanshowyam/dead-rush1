@@ -80,6 +80,42 @@
   #bR{right:128px;bottom:96px;width:64px;height:64px}
   #bM{right:30px;bottom:216px;width:60px;height:60px}
   #bP{left:16px;top:70px;width:44px;height:44px;font-size:16px}
+  .tb{touch-action:none;user-select:none;-webkit-user-select:none}
+  .screen button:focus-visible,.card:focus-visible{outline:3px solid var(--amber);outline-offset:4px}
+  @media (max-width:700px){
+    #hpwrap{left:12px;top:12px;width:min(150px,38vw)}
+    #hpbar{height:12px}
+    #hptxt{font-size:11px;letter-spacing:1px}
+    #mission{top:12px;max-width:42vw}
+    #mnum{font-size:14px;letter-spacing:2px}
+    #mtxt{font-size:10px;letter-spacing:1px}
+    #score{right:12px;top:10px}
+    #sc{font-size:18px}
+    #cmb{font-size:13px}
+    #ammo{right:14px;bottom:14px}
+    #am{font-size:38px}
+    #ar{font-size:19px}
+    #wname{font-size:9px;letter-spacing:2px}
+    #big{max-width:92vw;white-space:normal;font-size:clamp(24px,7vw,42px);letter-spacing:4px}
+    #toast{max-width:90vw;white-space:normal;text-align:center;font-size:14px;letter-spacing:2px}
+    .help{max-width:92vw;font-size:10px;letter-spacing:1px}
+    .screen h1{letter-spacing:6px}
+    .screen h2{letter-spacing:5px}
+    .card{width:min(42vw,190px);min-width:130px;padding:14px 9px}
+    .card .k{font-size:30px}
+    .card .n{font-size:14px;letter-spacing:1px}
+    .card .d{font-size:12px}
+  }
+  @media (max-height:520px) and (orientation:landscape){
+    .screen{padding:8px;justify-content:flex-start;overflow-y:auto}
+    .screen h1{font-size:clamp(32px,8vh,58px)}
+    .screen h2{margin:0 0 8px}
+    .screen p{margin:3px 0;font-size:12px}
+    .screen button{margin-top:10px;padding:9px 24px;font-size:17px}
+    .help{margin-top:8px}
+    .cards{margin-top:8px;gap:8px}
+    .card{padding:8px}
+  }
 </style>
 </head>
 <body>
@@ -151,7 +187,13 @@ const RS = mulberry(1337);
 
 // ---------------------------------------------------------------- persistence
 let best = { score: 0, mission: 0 };
-try { best = JSON.parse(localStorage.getItem('deadrush3d') || 'null') || best; } catch (e) {}
+try {
+  const saved = JSON.parse(localStorage.getItem('deadrush3d') || 'null');
+  if (saved && typeof saved === 'object') best = {
+    score: Number.isFinite(+saved.score) ? Math.max(0, Math.floor(+saved.score)) : 0,
+    mission: Number.isFinite(+saved.mission) ? Math.max(0, Math.floor(+saved.mission)) : 0
+  };
+} catch (e) {}
 const saveBest = () => { try { localStorage.setItem('deadrush3d', JSON.stringify(best)); } catch (e) {} };
 
 // ---------------------------------------------------------------- renderer / scene
@@ -671,7 +713,7 @@ function doMelee() {
 // ---------------------------------------------------------------- mission flow
 function completeMission() {
   if (M.done) return;
-  M.done = true; state = 'between'; betweenT = 2.4;
+  M.done = true; firing = false; state = 'between'; betweenT = 2.4;
   P.hp = Math.min(P.maxHp, P.hp + 25); P.reserve = Math.min(P.maxReserve, P.reserve + 30);
   score += 100 * M.n; SFX.win();
   zombies.forEach(z => { if (z.state === 'alive') { burst(z.x, 1.2, z.z, 8, 'goo', 3); z.state = 'dead'; z.dt = 0; } });
@@ -727,8 +769,18 @@ $('screen').addEventListener('click', e => {
   else if (a === 'quit') { state = 'menu'; clearWorld(); resetPlayer(); $('hud').style.display = 'none'; $('touch').style.display = 'none'; showMenu(); }
   else if (a === 'up') pickUpgrade(+b.dataset.i);
 });
-function pause() { if (state !== 'play') return; state = 'paused'; unlockPointer(); showPause(); }
-function resume() { if (state !== 'paused') return; state = 'play'; hideScreen(); lockPointer(); }
+function clearInputs() {
+  firing = false; meleeReq = false;
+  for (const code of Object.keys(keys)) keys[code] = false;
+}
+function pause() {
+  if (state !== 'play') return;
+  clearInputs(); state = 'paused'; unlockPointer(); showPause();
+}
+function resume() {
+  if (state !== 'paused') return;
+  state = 'play'; hideScreen(); lockPointer();
+}
 
 // ---------------------------------------------------------------- input
 function lockPointer() { if (!isTouch && renderer.domElement.requestPointerLock) { try { const p = renderer.domElement.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) {} } }
@@ -745,6 +797,10 @@ addEventListener('keydown', e => {
   else if (state === 'paused' && e.code === 'KeyP') resume();
 });
 addEventListener('keyup', e => keys[e.code] = false);
+addEventListener('blur', () => {
+  clearInputs();
+  if (state === 'play') pause();
+});
 addEventListener('mousemove', e => {
   if (document.pointerLockElement && state === 'play') { P.yaw -= e.movementX * 0.0022; P.pitch = clamp(P.pitch - e.movementY * 0.0022, -0.55, 0.65); }
 });
@@ -919,7 +975,7 @@ function updateCamera(dt) {
 function tick(dt) {
   tTotal += dt;
   if (state === 'play' || state === 'between') {
-    updatePlayer(dt);
+    if (state === 'play') updatePlayer(dt);
     if (state === 'play') {
       M.time += dt; spawnT -= dt; airT -= dt;
       const cap = Math.min(28, 6 + M.n * 2);
