@@ -113,14 +113,34 @@
 <div class="screen" id="screen"></div>
 <div id="err">Could not load the 3D engine (three.js).<br>Please check your internet connection and reload the page.</div>
 
-<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}</script>
 <script type="module">
 // =====================================================================
 //  DEAD RUSH 3D  -  third-person thriller zombie shooter (three.js)
 // =====================================================================
+// Try independent CDNs in sequence so one blocked or unavailable host
+// does not prevent the game from starting.
 let THREE;
-try { THREE = await import('three'); }
-catch (e) { document.getElementById('err').style.display = 'flex'; throw e; }
+const threeCdnSources = [
+  'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js',
+  'https://unpkg.com/three@0.160.0/build/three.module.js',
+  'https://esm.sh/three@0.160.0'
+];
+let threeLoadError;
+for (const source of threeCdnSources) {
+  try {
+    THREE = await import(source);
+    break;
+  } catch (error) {
+    threeLoadError = error;
+    console.warn('DEAD RUSH: Three.js source failed:', source, error);
+  }
+}
+if (!THREE) {
+  const errorBox = document.getElementById('err');
+  errorBox.innerHTML = 'Could not load the 3D engine (three.js).<br>All backup sources failed. Check your internet connection, disable content blockers for this site, then reload.<br><small style="display:block;margin-top:12px;color:#aaa">Technical detail: ' + String(threeLoadError?.message || 'module download failed').replace(/[<>&"]/g, '') + '</small>';
+  errorBox.style.display = 'flex';
+  throw threeLoadError || new Error('Unable to load Three.js');
+}
 
 const $ = id => document.getElementById(id);
 const isTouch = (window.matchMedia && matchMedia('(pointer:coarse)').matches) || 'ontouchstart' in window;
